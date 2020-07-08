@@ -5,11 +5,11 @@ from PyQt5.QtCore import QTimer, pyqtSignal
 from PyQt5.QtWidgets import QMessageBox, QDesktopWidget
 
 from kadas.kadasgui import (
-    KadasBottomBar, 
-    KadasPinItem, 
-    KadasItemPos, 
-    KadasMapCanvasItemManager, 
-    KadasLayerSelectionWidget, 
+    KadasBottomBar,
+    KadasPinItem,
+    KadasItemPos,
+    KadasMapCanvasItemManager,
+    KadasLayerSelectionWidget,
     KadasItemLayer,
     KadasLineItem
     )
@@ -48,7 +48,7 @@ class RoutePointMapItem(KadasPinItem):
 
 class ShortestPathLayer(KadasItemLayer):
 
-    LAYER_TYPE="shortestpath"
+    LAYER_TYPE = "shortestpath"
 
     def __init__(self, name):
         KadasItemLayer.__init__(self, name, QgsCoordinateReferenceSystem("EPSG:4326"), ShortestPathLayer.LAYER_TYPE)
@@ -56,11 +56,12 @@ class ShortestPathLayer(KadasItemLayer):
         self.points = []
         self.pins = []
         self.shortest = False
-        self.costingOptions = {}        
+        self.costingOptions = {}
         self.valhalla = ValhallaClient()
         self.timer = QTimer()
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.updateFromPins)
+        self.notes = 'Empty Notes'
 
     def setResponse(self, response):
         self.response = response
@@ -70,7 +71,7 @@ class ShortestPathLayer(KadasItemLayer):
         for itemId in items.keys():
             self.takeItem(itemId)
         self.pins = []
-    
+
     def pinHasChanged(self):
         self.timer.start(1000)
 
@@ -79,7 +80,7 @@ class ShortestPathLayer(KadasItemLayer):
         outCrs = QgsCoordinateReferenceSystem(4326)
         canvasCrs = iface.mapCanvas().mapSettings().destinationCrs()
         transform = QgsCoordinateTransform(canvasCrs, outCrs, QgsProject.instance())
-        for i, pin in enumerate(self.pins):            
+        for i, pin in enumerate(self.pins):
             wgspoint = transform.transform(QgsPointXY(pin.position()))
             self.points[i] = wgspoint
         route, response = self.valhalla.route(self.points, self.costingOptions, self.shortest)
@@ -89,7 +90,7 @@ class ShortestPathLayer(KadasItemLayer):
         self.lineItem.addPartFromGeometry(feature.geometry().constGet())
         self.lineItem.setTooltip(f"Distance: {feature['DIST_KM']}<br/>Time: {feature['DURATION_H']}")
         self.triggerRepaint()
-        
+
 
     @waitcursor
     def updateRoute(self, points, costingOptions, shortest):
@@ -109,21 +110,45 @@ class ShortestPathLayer(KadasItemLayer):
         transform = QgsCoordinateTransform(inCrs, canvasCrs, QgsProject.instance())
         for i, pt in enumerate(points):
             canvasPoint = transform.transform(pt)
-            pin = RoutePointMapItem(canvasCrs)            
+            pin = RoutePointMapItem(canvasCrs)
             pin.setPosition(KadasItemPos(canvasPoint.x(), canvasPoint.y()))
-            if i == 0:                                
+            if i == 0:
                 pin.setFilePath(iconPath('pin_origin.svg'))
                 pin.setName('Origin Point')
             elif i == len(points) - 1:
-                pin.setFilePath(iconPath('pin_destination.svg'))                
+                pin.setFilePath(iconPath('pin_destination.svg'))
                 pin.setName('Destination Point')
-            else:                
+            else:
                 pin.setup(':/kadas/icons/waypoint', pin.anchorX(), pin.anchorX(), 32, 32)
                 pin.setName('Waypoint %d' % i)
             pin.hasChanged.connect(self.pinHasChanged)
             self.pins.append(pin)
             self.addItem(pin)
-        self.triggerRepaint()            
+        self.triggerRepaint()
+
+    def layerType(self):
+        return ShortestPathLayer.LAYER_TYPE
+
+    def readXml(self, node):
+        KadasItemLayer.readXml(self, node)
+        # custom properties
+        # self.readImage( node.toElement().attribute("image_path", ".") )
+        self.notes = node.toElement().attribute("notes", ".")
+        pushMessage('Notes found: %s' % self.notes)
+
+        return True
+
+    def writeXml(self, node, doc, context):
+        KadasItemLayer.writeXml(self, node, doc, context)
+        element = node.toElement()
+        # write plugin layer type to project  (essential to be read from project)
+        element.setAttribute("type", "plugin")
+        element.setAttribute("name", ShortestPathLayer.LAYER_TYPE)
+        self.notes = 'The number of points is %d' % len(self.points)
+        element.setAttribute("notes", len(self.notes))
+        pushMessage('Notes written: %s' % self.notes)
+        # custom properties
+        return True
 
 class ShortestPathLayerType(KadasPluginLayerType):
 
