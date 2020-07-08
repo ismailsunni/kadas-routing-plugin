@@ -4,10 +4,12 @@ from PyQt5.QtCore import QObject
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QAction
 
+
+from qgis.core import QgsPluginLayerRegistry
 from kadas.kadasgui import KadasPluginInterface
 
 from kadasrouting.utilities import icon
-from kadasrouting.gui.shortestpathbottombar import ShortestPathBottomBar
+from kadasrouting.gui.shortestpathbottombar import ShortestPathBottomBar, ShortestPathLayerType
 
 class RoutingPlugin(QObject):
 
@@ -23,6 +25,9 @@ class RoutingPlugin(QObject):
         self.shortestAction.setCheckable(True)
         self.shortestAction.toggled.connect(self.showShortest)
         self.iface.addAction(self.shortestAction, self.iface.PLUGIN_MENU, self.iface.GPS_TAB)
+
+        # Register plugin layer type
+        QgsPluginLayerRegistry().addPluginLayerType(ShortestPathLayerType())
 
     def unload(self):
         self.iface.removeAction( self.shortestAction, self.iface.PLUGIN_MENU, self.iface.GPS_TAB)
